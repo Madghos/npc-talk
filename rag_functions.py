@@ -1,11 +1,9 @@
-from vllm import SamplingParams
 import torch
 from sentence_transformers import util
+import json
 
-sampling_params = SamplingParams(n=1, temperature=1.0, top_k=10, max_tokens=5000)
 
-
-def get_relevant_documents(text, documents, doc_embs, num_docs_to_return, retriever, reranker):
+def get_relevant_documents(text, documents, doc_embs, num_docs_to_return, retriever):
     # RETRIEVE PART
     query_for_embedding = "[query]: " + text
     query_emb = retriever.encode(
@@ -23,27 +21,18 @@ def get_relevant_documents(text, documents, doc_embs, num_docs_to_return, retrie
     for doc_idx, score in zip(top_results.indices.tolist(), top_results.values.tolist()):
         doc = documents[doc_idx]
         retrieved_docs.append((doc_idx, doc, float(score)))
-
-    # RERANK PART
-    top_for_rerank = retrieved_docs[:5]
-    pairs = [[text, doc] for _, doc, _ in top_for_rerank]
-
-    rerank_scores = reranker.predict(pairs)
-
-    reranked = sorted(
-        zip(top_for_rerank, rerank_scores),
-        key=lambda x: x[1],
-        reverse=True
-    )
-
-    # return only texts
-    return [x[0][1] for x in reranked][:num_docs_to_return]
+    # return top documents by retrieval score
+    return [doc for _, doc, _ in retrieved_docs][:num_docs_to_return]
 
 
-def get_model_response_with_rag(client, retriever, reranker, text, documents, doc_embs, last_response):
-    documents_to_llm = get_relevant_documents(text, documents, doc_embs, 3, retriever, reranker)
+def get_model_response_with_rag(client, model_name, retriever, text, npc_info, doc_embs, conversation_history):
+    documents_to_llm = get_relevant_documents(text, npc_info["knowledge"], doc_embs, 3, retriever)
 
-    system_prompt = """You are a medieval person. Continue the conversation concisely based on the knowledge provided in following chunks:\n"""
+    system_prompt = f"""
+    You are a medieval person.
+    Your name is {npc_info["name"]}.
+    Stay in character at all times.
+    Continue the conversation concisely based on the knowledge provided in following chunks:\n"""
 
     chunks = ""
     for i, doc in enumerate(documents_to_llm):
@@ -51,27 +40,83 @@ def get_model_response_with_rag(client, retriever, reranker, text, documents, do
 
     system_prompt += chunks
 
-    # system_prompt += "Your last response was:\n" + last_response + "\n"
+    system_prompt += """
+
+    You must answer ONLY in valid JSON.
+
+    Format:
+
+    {
+        "message": "<npc response>",
+        "revealed_name": false,
+        "give_item": false,
+        "item_name": "",
+        "give_money": false,
+        "money_amount": 0
+    }
+
+    Set revealed_name to true if during this response you reveal your name to the player.
+
+    If you decide to give an item to the player:
+    - set give_item to true
+    - set item_name to the item's name
+
+    Otherwise:
+    - set give_item to false
+    - set item_name to ""
+
+    If you decide to give money to the player:
+    - set give_money to true
+    - set money_amount to the amount of money you give
+
+    Otherwise:
+    - set give_money to false
+    - set money_amount to 0
+    """
+
+    # Include NPC inventory so the model knows which items are available to give
+    npc_inventory = npc_info.get("inventory", [])
+    system_prompt += "\nNPC INVENTORY:\n"
+    for it in npc_inventory:
+        system_prompt += f"- {it}\n"
+    system_prompt += "\nOnly set `give_item` true if the item is present above."
+    system_prompt += f"\nNPC Gold: {npc_info.get('money', 0)}"
+    system_prompt += "\nOnly set `give_money` true if the NPC has at least `money_amount`."
 
     # LLM PART
     messages = [
         {
             "role": "system",
             "content": system_prompt
-        },
-        {
-            "role": "user",
-            "content": text
-        },
+        }
     ]
 
+    messages.extend(conversation_history)
+
+    messages.append({
+        "role": "user",
+        "content": text
+    })
+
     response = client.chat.completions.create(
-        model="gpt-4.1-mini",
+        model=model_name,
         messages=messages,
         temperature=0.5,
-        max_tokens=500
+        max_tokens=100,
+        response_format={"type": "json_object"}
     )
 
-    answer = response.choices[0].message.content
+    raw_response = response.choices[0].message.content
 
-    return text, chunks, answer
+    data = json.loads(raw_response)
+
+    answer = data["message"]
+    other_info = {
+        "revealed_name": data.get("revealed_name", False),
+        "give_item": data.get("give_item", False),
+        "item_name": data.get("item_name", ""),
+        "give_money": data.get("give_money", False),
+        "money_amount": int(data.get("money_amount", 0) or 0),
+    }
+
+    return text, chunks, answer, other_info

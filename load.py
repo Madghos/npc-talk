@@ -1,11 +1,14 @@
 import torch
-from sentence_transformers import SentenceTransformer, CrossEncoder
+from sentence_transformers import SentenceTransformer
 from openai import OpenAI
+from dotenv import load_dotenv
 import os
 
+load_dotenv()
 api_key = os.getenv("OPENAI_API_KEY")
 
-def load_models(model_name, retriever_name, reranker_name):
+
+def load_models(retriever_name):
 
     print("Loading models...")
 
@@ -13,27 +16,16 @@ def load_models(model_name, retriever_name, reranker_name):
         api_key=api_key
     )
 
-    print(f"Client for {model_name} initialized successfully.")
+    print(f"Client initialized successfully.")
 
     retriever = SentenceTransformer(
         retriever_name,
         model_kwargs={"torch_dtype": torch.bfloat16} if torch.cuda.is_available() else None,
-        
     )
 
     print(f"Retriever {retriever_name} loaded successfully.")
 
-    reranker = CrossEncoder(
-        reranker_name,
-        activation_fn=torch.nn.Identity(),
-        max_length=8192,
-        device="cuda" if torch.cuda.is_available() else "cpu",
-        model_kwargs={"torch_dtype": torch.bfloat16} if torch.cuda.is_available() else None,
-    )
-
-    print(f"Reranker {reranker_name} loaded successfully.")
-
-    return client, retriever, reranker
+    return client, retriever
 
 
 def encode_documents(retriever, documents):
