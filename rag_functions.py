@@ -33,8 +33,8 @@ def get_model_response(client, model_name, retriever, text, player_info, npc_inf
 
     system_prompt = get_system_prompt(npc_info, player_info, chunks)
 
-    print("\n[SYSTEM PROMPT]\n")
-    print(system_prompt)
+    # print("\n[SYSTEM PROMPT]\n")
+    # print(system_prompt)
 
     messages = [
         {
@@ -60,8 +60,8 @@ def get_model_response(client, model_name, retriever, text, player_info, npc_inf
 
     raw_response = response.choices[0].message.content
 
-    print("\n[MODEL RESPONSE]\n")
-    print(raw_response)
+    # print("\n[MODEL RESPONSE]\n")
+    # print(raw_response)
 
     data = json.loads(raw_response)
 
