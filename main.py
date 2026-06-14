@@ -1,25 +1,39 @@
 from load import load_models, encode_documents
-from rag_functions import get_model_response_with_rag
+from rag_functions import get_model_response
+from process_response import process_response
 
-player_inventory = []
-player_money = 5
+player_info = {
+    "inventory": [],
+    "money": 5
+}
 
 npc_info = {
     "name": "John",
     "name_known": False,
-    "inventory": ["Iron Sword", "Leather Apron", "Old Horseshoe"],
+    "inventory": {
+        "Mithril Ore": 300,
+        "Iron Sword": 50,
+        "Leather Apron": 15,
+        "Old Horseshoe": 5
+    },
     "money": 20,
     "knowledge": ["You are a blacksmith in the village of Puddlewater.",
                   "You are known for your skill in crafting weapons and armor.",
-                  "You have a friendly demeanor and enjoy helping travelers with their needs."]
+                  "You have a friendly demeanor and enjoy helping travelers with their needs.",
+                  "You have a son named Timmy who is learning the trade.",
+                  "You recently acquired a rare ore that can be used to craft powerful weapons.",
+                  "You are a member of the local blacksmith guild and often collaborate with other blacksmiths in the area.",
+                  "You have a secret recipe for a special type of steel that is highly sought after by adventurers and warriors.",
+                  "You have a friendly rivalry with another blacksmith in a neighboring town, and you often compete to see who can craft the best weapons and armor.",
+                  "You have a small workshop where you create your masterpieces, and it's filled with various tools, materials, and half-finished projects."]
 }
 
 def main():
     model_name = "gpt-4.1-mini"
     retriever_name = "BAAI/bge-small-en-v1.5"
     client, retriever = load_models(retriever_name)
-    global player_money
 
+    enc_documents = encode_documents(retriever, npc_info["knowledge"])
 
     conversation_history = []
 
@@ -29,16 +43,16 @@ def main():
 
     while True:
         user_input = input("You: ").strip()
-        if not user_input or user_input.lower() in {"quit", "exit"}:
+        if user_input.lower() in {"quit", "exit"}:
             break
         if user_input.lower() == "inv":
-            if not player_inventory:
+            if not player_info["inventory"]:
                 print("\nYour inventory is empty.")
-                print(f"\nGold: {player_money}")
+                print(f"\nGold: {player_info['money']}")
             else:
                 print("\nYour inventory:\n")
-                print('\n'.join(player_inventory))
-                print(f"\nGold: {player_money}")
+                print('\n'.join(player_info["inventory"]))
+                print(f"\nGold: {player_info['money']}")
             continue
         if user_input.lower() == "npcinv":
             npc_inv = npc_info.get("inventory", [])
@@ -47,60 +61,26 @@ def main():
                 print(f"\nNPC Gold: {npc_info.get('money', 0)}")
             else:
                 print("\nNPC inventory:\n")
-                print('\n'.join(npc_inv))
+                for item, price in npc_inv.items():
+                    print(f"{item} - {price} gold")
                 print(f"\nNPC Gold: {npc_info.get('money', 0)}")
             continue
 
-        enc_documents = encode_documents(retriever, npc_info["knowledge"])
-
-        text, chunks, response, other_info = get_model_response_with_rag(
+        text, chunks, response, other_info = get_model_response(
             client,
             model_name,
             retriever,
             user_input,
+            player_info,
             npc_info,
             enc_documents,
             conversation_history,
         )
 
-        # Prepare any item/name/money updates but defer printing messages
-        item_msg = None
-        money_msg = None
-        if other_info["revealed_name"]:
-            npc_info["name_known"] = True
-        if other_info["give_item"]:
-            item = other_info.get("item_name", "") or ""
-            # case-insensitive match to NPC inventory
-            npc_inv = npc_info.get("inventory", [])
-            match = None
-            for it in npc_inv:
-                if it.lower() == item.lower():
-                    match = it
-                    break
+        item_msg, money_msg, offered_item = process_response(player_info, npc_info, text, response, other_info)
 
-            if match:
-                player_inventory.append(match)
-                npc_info["inventory"].remove(match)
-                item_msg = f"\n[ITEM RECEIVED] {match}"
-            else:
-                item_msg = f"\n[NPC DOESN'T HAVE ITEM] {item}"
-
-        # handle money transfer from NPC to player
-        if other_info.get("give_money"):
-            amt = int(other_info.get("money_amount", 0) or 0)
-            if amt <= 0:
-                money_msg = f"\n[INVALID AMOUNT] {amt}"
-            else:
-                npc_money = npc_info.get("money", 0)
-                if npc_money >= amt:
-                    player_money += amt
-                    npc_info["money"] = npc_money - amt
-                    money_msg = f"\n[MONEY RECEIVED] {amt} gold"
-                else:
-                    money_msg = f"\n[NPC CANNOT AFFORD] {amt} gold"
-
-        print("\n[RAG CHUNKS USED]")
-        print(chunks)
+        # print("\n[RAG CHUNKS USED]")
+        # print(chunks)
 
         if npc_info["name_known"]:
             print(f"\n{npc_info['name']}:", response)
@@ -112,6 +92,23 @@ def main():
             print(item_msg)
         if money_msg:
             print(money_msg)
+        if offered_item["item"]:
+            user_input = input(f"\nBuy {offered_item['item']} for {offered_item['price']} gold? (yes/no): ").strip()
+            
+            item = offered_item["item"]
+            if user_input.lower() == "yes":
+                price = offered_item["price"]
+                if player_info.get("money", 0) >= price:
+                    player_info["money"] -= price
+                    npc_info["money"] += price
+                    player_info["inventory"].append(item)
+                    del npc_info["inventory"][item]
+                    item_msg = f"\n[ITEM RECEIVED] {item}"
+                else:
+                    item_msg = f"\n[NOT ENOUGH GOLD] You need {price} gold to buy {item}"
+                print(item_msg)
+            else:
+                print(f"\n[OFFER DECLINED] You did not buy {item}.")
 
         conversation_history.append({
             "role": "user",
@@ -127,4 +124,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

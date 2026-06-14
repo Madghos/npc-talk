@@ -1,10 +1,10 @@
 import torch
 from sentence_transformers import util
 import json
+from system_prompt import get_system_prompt
 
 
-def get_relevant_documents(text, documents, doc_embs, num_docs_to_return, retriever):
-    # RETRIEVE PART
+def get_chunks(text, npc_knowledge, embeddings, num_chunks_to_return, retriever):
     query_for_embedding = "[query]: " + text
     query_emb = retriever.encode(
         [query_for_embedding],
@@ -12,78 +12,30 @@ def get_relevant_documents(text, documents, doc_embs, num_docs_to_return, retrie
         show_progress_bar=False
     )
 
-    scores = util.cos_sim(query_emb, doc_embs)[0]
+    scores = util.cos_sim(query_emb, embeddings)[0]
 
-    top_k = min(10, len(documents))
+    top_k = min(10, len(npc_knowledge))
     top_results = torch.topk(scores, k=top_k)
 
-    retrieved_docs = []
-    for doc_idx, score in zip(top_results.indices.tolist(), top_results.values.tolist()):
-        doc = documents[doc_idx]
-        retrieved_docs.append((doc_idx, doc, float(score)))
-    # return top documents by retrieval score
-    return [doc for _, doc, _ in retrieved_docs][:num_docs_to_return]
+    retrieved_chunks = []
+    for chunk_idx, score in zip(top_results.indices.tolist(), top_results.values.tolist()):
+        chunk = npc_knowledge[chunk_idx]
+        retrieved_chunks.append((chunk_idx, chunk, float(score)))
+    return [chunk for _, chunk, _ in retrieved_chunks][:num_chunks_to_return]
 
 
-def get_model_response_with_rag(client, model_name, retriever, text, npc_info, doc_embs, conversation_history):
-    documents_to_llm = get_relevant_documents(text, npc_info["knowledge"], doc_embs, 3, retriever)
-
-    system_prompt = f"""
-    You are a medieval person.
-    Your name is {npc_info["name"]}.
-    Stay in character at all times.
-    Continue the conversation concisely based on the knowledge provided in following chunks:\n"""
+def get_model_response(client, model_name, retriever, text, player_info, npc_info, doc_embs, conversation_history):
+    knowledge_to_llm = get_chunks(text, npc_info["knowledge"], doc_embs, 3, retriever)
 
     chunks = ""
-    for i, doc in enumerate(documents_to_llm):
+    for i, doc in enumerate(knowledge_to_llm):
         chunks += f"[CHUNK {i+1}]\n{doc}\n"
 
-    system_prompt += chunks
+    system_prompt = get_system_prompt(npc_info, player_info, chunks)
 
-    system_prompt += """
+    print("\n[SYSTEM PROMPT]\n")
+    print(system_prompt)
 
-    You must answer ONLY in valid JSON.
-
-    Format:
-
-    {
-        "message": "<npc response>",
-        "revealed_name": false,
-        "give_item": false,
-        "item_name": "",
-        "give_money": false,
-        "money_amount": 0
-    }
-
-    Set revealed_name to true if during this response you reveal your name to the player.
-
-    If you decide to give an item to the player:
-    - set give_item to true
-    - set item_name to the item's name
-
-    Otherwise:
-    - set give_item to false
-    - set item_name to ""
-
-    If you decide to give money to the player:
-    - set give_money to true
-    - set money_amount to the amount of money you give
-
-    Otherwise:
-    - set give_money to false
-    - set money_amount to 0
-    """
-
-    # Include NPC inventory so the model knows which items are available to give
-    npc_inventory = npc_info.get("inventory", [])
-    system_prompt += "\nNPC INVENTORY:\n"
-    for it in npc_inventory:
-        system_prompt += f"- {it}\n"
-    system_prompt += "\nOnly set `give_item` true if the item is present above."
-    system_prompt += f"\nNPC Gold: {npc_info.get('money', 0)}"
-    system_prompt += "\nOnly set `give_money` true if the NPC has at least `money_amount`."
-
-    # LLM PART
     messages = [
         {
             "role": "system",
@@ -108,14 +60,16 @@ def get_model_response_with_rag(client, model_name, retriever, text, npc_info, d
 
     raw_response = response.choices[0].message.content
 
+    print("\n[MODEL RESPONSE]\n")
+    print(raw_response)
+
     data = json.loads(raw_response)
 
     answer = data["message"]
     other_info = {
         "revealed_name": data.get("revealed_name", False),
-        "give_item": data.get("give_item", False),
+        "action": data.get("action", "none"),
         "item_name": data.get("item_name", ""),
-        "give_money": data.get("give_money", False),
         "money_amount": int(data.get("money_amount", 0) or 0),
     }
 
