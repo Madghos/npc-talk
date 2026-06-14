@@ -7,10 +7,12 @@ def process_response(player_info, npc_info, text, response, other_info):
         "item": None,
         "price": None,
     }
+    offered_quest_name = ""
 
     # reveal NPC name
     if other_info["revealed_name"]:
-        npc_info["name_known"] = True
+        if npc_info["name"] in response:
+            npc_info["name_known"] = True
 
     # give item to player
     if other_info["action"] == "give_item":
@@ -57,4 +59,44 @@ def process_response(player_info, npc_info, text, response, other_info):
             else:
                 money_msg = f"\n[NPC CANNOT AFFORD] {amt} gold"
 
-    return item_msg, money_msg, offered_item
+    # offer quest to player
+    if other_info["action"] == "offer_quest":
+        quest_name = other_info.get("quest_name", "") or ""
+        npc_quests = npc_info.get("quests", [])
+        
+        match = next((q for q in npc_quests if q["name"].lower() == quest_name.lower()), None)
+
+        if not match:
+            item_msg = f"\n[NPC DOESN'T HAVE QUEST] {quest_name}"
+        else:
+            # Check if player already has the quest
+            player_quests = player_info.get("quests", [])
+            if any(q["name"].lower() == match["name"].lower() for q in player_quests):
+                item_msg = f"\n[QUEST ALREADY ACCEPTED] {match['name']}"
+            else:
+                offered_quest_name = match['name']
+
+    # give reward to player
+    if other_info["action"] == "give_reward":
+        quest_name = other_info.get("quest_name", "") or ""
+        npc_quests = npc_info.get("quests", [])
+        
+        match = next((q for q in npc_quests if q["name"].lower() == quest_name.lower()), {})
+        quest_id = npc_info["quests"].index(match)
+
+        if npc_info["quests"][quest_id]["status"] == "due_reward":
+            item = match.get("reward_item", "") or ""
+            money = match.get("reward_money", 0) or 0
+
+            player_info["inventory"].append(item)
+            item_msg = f"\n[ITEM RECEIVED] {item}"
+
+            player_info["money"] += money
+            money_msg = f"\n[MONEY RECEIVED] {money} gold"
+
+            npc_info["quests"][quest_id]["status"] = "completed"
+
+        else:
+            item_msg = f"\n[QUEST ALREADY COMPLETED] {match['name']}"
+
+    return item_msg, money_msg, offered_item, offered_quest_name

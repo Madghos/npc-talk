@@ -71,6 +71,7 @@ def get_model_response(client, model_name, retriever, text, player_info, npc_inf
         "action": data.get("action", "none"),
         "item_name": data.get("item_name", ""),
         "money_amount": int(data.get("money_amount", 0) or 0),
+        "quest_name": data.get("quest_name", "")
     }
 
     return text, chunks, answer, other_info
