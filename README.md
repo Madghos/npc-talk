@@ -4,12 +4,12 @@
 
 ### Autorzy:
 
-Maciej Czarny
+- Maciej Czarny
 
-Kajetan Szamotuła
+- Kajetan Szamotuła
 
 ### Uruchomienie projektu:
 
-pip install -r requirements.txt
+- pip install -r requirements.txt
 
-python main.py
+- python main.py
