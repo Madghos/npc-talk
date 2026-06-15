@@ -105,6 +105,7 @@ class GameGUI:
         tk.Button(self.menu_frame, text="My Inventory", command=self.show_player_inv).pack(side=tk.LEFT, padx=5)
         tk.Button(self.menu_frame, text="NPC Inventory", command=self.show_npc_inv).pack(side=tk.LEFT, padx=5)
         tk.Button(self.menu_frame, text="Quests", command=self.show_quests).pack(side=tk.LEFT, padx=5)
+        tk.Button(self.menu_frame, text="Complete Quest", command=self.complete_first_quest).pack(side=tk.LEFT, padx=5)
 
     def append_to_chat(self, message):
         self.chat_text.config(state=tk.NORMAL)
@@ -192,6 +193,32 @@ class GameGUI:
             for idx, q in enumerate(player_info["quests"]):
                 quests_txt += f"[{idx}] {q['name']}: {q['description']}\n"
             messagebox.showinfo("Your Quests", quests_txt)
+
+    def complete_first_quest(self):
+        if not player_info["quests"]:
+            messagebox.showinfo("Quest", "No active quests.")
+            return
+
+        quest = player_info["quests"][0]
+
+        npc_quest = next(
+            (q for q in npc_info["quests"]
+            if q["name"].lower() == quest["name"].lower()),
+            None
+        )
+
+        if npc_quest:
+            quest_id = npc_info["quests"].index(npc_quest)
+
+            npc_info["quests"][quest_id]["status"] = "due_reward"
+
+            completed_name = quest["name"]
+            player_info["quests"].pop(0)
+
+            messagebox.showinfo(
+                "Quest Completed",
+                f"[QUEST COMPLETED] {completed_name}"
+            )
 
 if __name__ == "__main__":
     root = tk.Tk()

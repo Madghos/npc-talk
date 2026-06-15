@@ -88,8 +88,9 @@ def process_response(player_info, npc_info, text, response, other_info):
             item = match.get("reward_item", "") or ""
             money = match.get("reward_money", 0) or 0
 
-            player_info["inventory"].append(item)
-            item_msg = f"\n[ITEM RECEIVED] {item}"
+            if not item == "":
+                player_info["inventory"].append(item)
+                item_msg = f"\n[ITEM RECEIVED] {item}"
 
             player_info["money"] += money
             money_msg = f"\n[MONEY RECEIVED] {money} gold"
