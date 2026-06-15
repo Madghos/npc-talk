@@ -54,7 +54,7 @@ def get_model_response(client, model_name, retriever, text, player_info, npc_inf
         model=model_name,
         messages=messages,
         temperature=0.5,
-        max_tokens=100,
+        max_tokens=200,
         response_format={"type": "json_object"}
     )
 

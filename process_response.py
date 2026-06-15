@@ -69,10 +69,10 @@ def process_response(player_info, npc_info, text, response, other_info):
         if not match:
             item_msg = f"\n[NPC DOESN'T HAVE QUEST] {quest_name}"
         else:
-            # Check if player already has the quest
-            player_quests = player_info.get("quests", [])
-            if any(q["name"].lower() == match["name"].lower() for q in player_quests):
+            if match["status"] in ["accepted", "due_reward"]:
                 item_msg = f"\n[QUEST ALREADY ACCEPTED] {match['name']}"
+            elif match["status"] == "completed":
+                item_msg = f"\n[QUEST ALREADY COMPLETED] {match['name']}"
             else:
                 offered_quest_name = match['name']
 

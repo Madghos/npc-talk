@@ -15,7 +15,8 @@ npc_info = {
         "Mithril Ore": 300,
         "Iron Sword": 50,
         "Leather Apron": 15,
-        "Old Horseshoe": 5
+        "Old Horseshoe": 5,
+        "Timmy": 100
     },
     "money": 20,
     "knowledge": ["You are a blacksmith in the village of Puddlewater.",
@@ -33,6 +34,13 @@ npc_info = {
             "description": "A pack of wolves has been terrorizing the village. Help the villagers by hunting down the wolves.",
             "reward_money": 100,
             "reward_item": "Leather Gloves",
+            "status": "available",
+        },
+        {
+            "name": "Carrots",
+            "description": "Collect 10 carrots from the garden and bring them to me.",
+            "reward_money": 50,
+            "reward_item": "",
             "status": "available",
         }
     ]

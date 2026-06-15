@@ -74,18 +74,19 @@ If you decide to sell an item to the player:
 - set action to "offer_item"
 - set item_name to the item's name
 
-You can offer following quests to the player:
+You can offer following quests to the player (if their status is "available"):
 
 """
 
     npc_quests = npc_info.get("quests", [])
     for quest in npc_quests:
-        system_prompt += f"- {quest['name']}: {quest['description']} (Reward: {quest['reward_money']} gold, {quest['reward_item']})\n"
+        system_prompt += f"- {quest['name']} ({quest['status']}): {quest['description']} (Reward: {quest['reward_money']} gold, {quest['reward_item']})\n"
 
     system_prompt += """
 
-If a player asks about work, or the conversation otherwise leads to the topic of one of the quests you have available, you can offer a quest to the player, but only after you say what the quest is about, based on the description.
-If you decide to offer a quest to the player:
+If a player asks about work, or the conversation otherwise leads to the topic of one of the quests you have available, tell the player about the task, based on the description.
+
+If the player is willing to do a specific task, make him an offer:
 - set action to "offer_quest"
 - set quest_name to the quest's name
 
