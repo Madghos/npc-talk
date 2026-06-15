@@ -12,4 +12,6 @@
 
 - pip install -r requirements.txt
 
+- dodaj plik *.env* z kluczem OpenAI na podstawie *.env example*
+
 - python main.py
